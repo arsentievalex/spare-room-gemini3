@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spare Room</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="sidebar-container">
+    <!-- Loading State -->
+    <div id="loading-state" class="state-container">
+      <div class="spinner"></div>
+      <p class="loading-text">Styling in progress...</p>
+      <p class="loading-subtext" id="loading-details">Analyzing your wardrobe</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="error-state" class="state-container hidden">
+      <div class="error-icon">!</div>
+      <p class="error-title">Something went wrong</p>
+      <p class="error-message" id="error-message">Please try again</p>
+      <button id="retry-btn" class="retry-button">Try Again</button>
+    </div>
+
+    <!-- Success State -->
+    <div id="success-state" class="state-container hidden">
+      <!-- Product Info - Minimal -->
+      <div class="section product-info">
+        <p id="product-name" class="product-name">Loading...</p>
+        <p id="product-details" class="product-details"></p>
+      </div>
+
+      <!-- Try-On Image Carousel -->
+      <div class="section generated-image">
+        <h2>See it styled</h2>
+        <p class="section-subtitle">Your new look with pieces you own</p>
+        <div class="image-carousel">
+          <button class="carousel-arrow carousel-arrow-left" id="carousel-left" aria-label="Previous angle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15,18 9,12 15,6"></polyline>
+            </svg>
+          </button>
+          <div class="image-container">
+            <img id="styled-image" src="" alt="Styled outfit visualization">
+            <p id="image-placeholder" class="image-placeholder">Creating your look...</p>
+          </div>
+          <button class="carousel-arrow carousel-arrow-right" id="carousel-right" aria-label="Next angle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9,18 15,12 9,6"></polyline>
+            </svg>
+          </button>
+        </div>
+        <div class="carousel-indicators" id="carousel-indicators">
+          <!-- Dots will be inserted here -->
+        </div>
+        <p class="angle-label" id="angle-label">Front</p>
+      </div>
+
+      <!-- Selected Wardrobe Items -->
+      <div class="section wardrobe-items">
+        <h2>Already in your closet</h2>
+        <p class="section-subtitle">Items you own that pair perfectly</p>
+        <div id="wardrobe-items-list" class="items-list">
+          <!-- Items will be inserted here -->
+        </div>
+      </div>
+
+      <!-- Styling Notes -->
+      <div class="section styling-notes" id="styling-notes-section">
+        <h2>Why these work</h2>
+        <div id="styling-notes" class="styling-notes-list">
+          <!-- Notes will be inserted here -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="state-container hidden">
+      <div class="empty-icon">👕</div>
+      <p class="empty-title">Ready to style</p>
+      <p class="empty-text">Click "Style this item" on any product page</p>
+    </div>
+  </div>
+
+  <script src="sidebar.js"></script>
+</body>
+</html>

@@ -1,0 +1,480 @@
+/* Shared styles for Spare Room - Personal AI Stylist */
+
+:root {
+  --primary-color: #18181b;
+  --primary-hover: #27272a;
+  --accent-color: #a855f7;
+  --success-color: #22c55e;
+  --warning-color: #f59e0b;
+  --error-color: #ef4444;
+  --text-primary: #18181b;
+  --text-secondary: #71717a;
+  --text-muted: #a1a1aa;
+  --bg-primary: #ffffff;
+  --bg-secondary: #fafafa;
+  --border-color: #e4e4e7;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+}
+
+/* ==================== Popup Styles ==================== */
+
+.popup-container {
+  width: 300px;
+  padding: 20px;
+}
+
+.popup-header {
+  margin-bottom: 20px;
+}
+
+.popup-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 2px;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+}
+
+.popup-tagline {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.current-page {
+  background-color: var(--bg-secondary);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border-color);
+}
+
+.page-title {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-primary);
+  word-wrap: break-word;
+  line-height: 1.4;
+}
+
+.style-button {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  background: var(--primary-color);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.style-button:hover:not(:disabled) {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.style-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button-icon {
+  font-size: 16px;
+}
+
+.status {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.status:empty {
+  display: none;
+}
+
+.status.loading {
+  background-color: #e0e7ff;
+  color: var(--primary-color);
+}
+
+.status.success {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.status.error {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.hint {
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* ==================== Sidebar Styles ==================== */
+
+.sidebar-container {
+  min-height: 100vh;
+  padding: 20px;
+  background: var(--bg-primary);
+}
+
+.state-container {
+  padding: 20px 0;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Loading State */
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--text-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 60px auto 24px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  text-align: center;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.loading-subtext {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Error State */
+.error-icon {
+  width: 48px;
+  height: 48px;
+  background-color: var(--bg-secondary);
+  color: var(--error-color);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: bold;
+  margin: 60px auto 16px;
+  border: 1px solid var(--border-color);
+}
+
+.error-title {
+  text-align: center;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.error-message {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  padding: 0 20px;
+}
+
+.retry-button {
+  display: block;
+  margin: 0 auto;
+  padding: 12px 28px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.retry-button:hover {
+  background-color: var(--bg-secondary);
+  border-color: var(--text-muted);
+}
+
+/* Empty State */
+.empty-icon {
+  font-size: 40px;
+  text-align: center;
+  margin: 60px 0 16px;
+}
+
+.empty-title {
+  text-align: center;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.empty-text {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 0 20px;
+}
+
+/* Success State */
+.section {
+  margin-bottom: 28px;
+}
+
+.section h2 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.section-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+/* Product Info */
+.product-info {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.product-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  letter-spacing: -0.4px;
+  line-height: 1.3;
+}
+
+.product-details {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Wardrobe Items */
+.items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wardrobe-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px;
+  background-color: var(--bg-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.item-image-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+}
+
+.item-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.item-color {
+  width: 100%;
+  height: 100%;
+}
+
+.item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+}
+
+.item-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+.item-meta .color-hex {
+  font-size: 10px;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  color: var(--text-muted);
+  letter-spacing: -0.3px;
+  text-transform: uppercase;
+}
+
+.no-items {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 20px;
+}
+
+/* Styling Notes */
+.styling-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.styling-note {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.note-item {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.note-reason {
+  color: var(--text-secondary);
+}
+
+/* Generated Image Carousel */
+.image-carousel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.carousel-arrow {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.carousel-arrow:hover {
+  background: var(--bg-secondary);
+  border-color: var(--text-muted);
+}
+
+.carousel-arrow:active {
+  transform: scale(0.95);
+}
+
+.image-container {
+  background-color: var(--bg-secondary);
+  border-radius: 12px;
+  overflow: hidden;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  flex: 1;
+}
+
+.image-container img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.image-placeholder {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 40px;
+  text-align: center;
+}
+
+.carousel-indicators {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.carousel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.carousel-dot:hover {
+  background: var(--text-muted);
+}
+
+.carousel-dot.active {
+  background: var(--text-primary);
+  transform: scale(1.2);
+}
+
+.angle-label {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-top: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
