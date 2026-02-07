@@ -2,117 +2,83 @@
 
 ## Inspiration
 
-You know the feeling. You order clothes online that look amazing on the model, only to find they don't quite work with anything in your closet. Or worse, they don't fit right and end up in the returns pile. The fashion industry's return rate hovers around 30-40% for online purchases, with each return generating significant CO2 emissions from shipping, repackaging, and often ending up in landfills.
+You order clothes online that look great on the model, only to find they clash with everything in your closet. Or they don't fit right and go straight into the returns pile. Online fashion returns sit around 30-40%, and each one means more shipping, more packaging, more waste.
 
-I kept asking myself: what if shoppers could see exactly how a piece would look on *them* and whether it actually complements what they already own, before clicking "buy"? That's how Spare Room was born. The name comes from Narnia, where the spare room holds a wardrobe that serves as a portal to another world. This app is a portal between online shopping and your wardrobe. I wanted to bridge the gap between the excitement of online shopping and the reality of what you actually own, enabling conscious buying decisions that are good for your wallet and the planet.
+I kept thinking: what if you could see how a piece looks on *you* and whether it actually goes with what you own — before buying? That's Spare Room. The name is a nod to Narnia, where the spare room holds a wardrobe that's a portal to another world. This app is a portal between the store and your closet.
 
-## What it does
+## What It Does
 
-Spare Room is an AI-powered shopping companion that connects online stores directly to your personal wardrobe. Here's how it works:
+Spare Room connects online stores to your wardrobe using AI. Two parts work together:
 
-**Initial Setup (Web App):** Users start by creating their style profile through a web app built with Google AI Studio. They upload a photo of themselves, provide their measurements (height, weight, gender, and any specific dimensions), note any style preferences or restrictions (like "I don't wear skinny jeans"), and upload photos of their existing wardrobe.
+**Web App (profile setup):** Built with Google AI Studio. You upload a selfie, enter your measurements and sizes, note any style preferences ("no skinny jeans", "mostly streetwear"), and snap photos of your wardrobe items. Gemini 3 Flash analyzes each item photo and catalogs it — name, color, type, style. Everything gets stored in Google Cloud Storage under a unique username.
 
-**Shopping Experience (Chrome Extension):** The Chrome extension serves as the main control panel. When browsing any online clothing store, users can:
-- **Virtual Try-On:** See how the garment would look on their actual body from multiple angles
-- **Wardrobe Matching:** Get instant suggestions for items in their closet that would pair well with the new piece
-- **Fit Score:** Receive a compatibility score (0-100) based on their existing wardrobe and style
-- **Style Compatibility:** Get alerts if something conflicts with their stated preferences
+**Chrome Extension (shopping):** This is where you spend your time. Browse any clothing store, click the extension on a product page, and get:
+- **Virtual Try-On** — see the item on your body from 4 angles (front, left, right, back)
+- **Wardrobe Matching** — which items you already own pair well with this piece
+- **Fit Score** — 0-100 compatibility score based on your wardrobe and style
+- **Styling Tip** — a short note on why the combination works (or doesn't)
 
-The result? Shoppers make informed decisions, buy clothes they'll actually wear, and dramatically reduce the likelihood of returns.
+You make better purchases, wear what you buy, and return less.
 
-## How I built it
+## How I Built It
 
-I leveraged Google's Gemini 3 API as the backbone of all AI capabilities. The system uses three different models, each chosen for a specific job:
+Four Gemini 3 models, each doing what it's best at:
 
-### Architecture Overview
+| Step | Model | What It Does |
+|------|-------|-------------|
+| Onboarding | `gemini-3-flash-preview` | Analyzes wardrobe photos → structured metadata |
+| 1. Extract | `gemini-3-flash-preview` (thinking: low) | Screenshot + HTML → product info (name, color, brand, price) |
+| 2. Analyze | `gemini-3-flash-preview` (thinking: medium) | Product + wardrobe + user profile → fit score, best matches, tip |
+| 3a. Try-On | `gemini-3-pro-image-preview` | User photo + product + wardrobe items → front-view try-on image |
+| 3b. Angles | `gemini-2.5-flash-image` | Front image → left, right, back views (3 separate calls) |
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Chrome Extension                                │
-│  (captures screenshot + HTML, sends to backend)                      │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      FastAPI Backend                                 │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-            ┌─────────────────────┼─────────────────────┐
-            ▼                     ▼                     ▼
-   ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-   │ STEP 1: Extract │   │ STEP 2: Analyze │   │ STEP 3: Generate│
-   │ Product Info    │   │ Styling & Fit   │   │ Try-On Images   │
-   │                 │   │                 │   │                 │
-   │ gemini-3-flash  │   │ gemini-3-flash  │   │ gemini-3-pro-   │
-   │ thinking: low   │   │ thinking: medium│   │ image-preview   │
-   │                 │   │                 │   │        +        │
-   │ → name, color,  │   │ → fit score     │   │ gemini-2.5-     │
-   │   brand, price, │   │ → matching items│   │ flash-image     │
-   │   category      │   │ → styling tips  │   │ (for angles)    │
-   └─────────────────┘   └─────────────────┘   └─────────────────┘
+Web App (AI Studio)                    Chrome Extension
+┌──────────────────┐                  ┌──────────────────┐
+│ Upload photo     │                  │ Capture page     │
+│ Upload wardrobe  │──► GCS Bucket    │ screenshot + HTML│
+│ Enter sizes      │    (user data)   └────────┬─────────┘
+└──────────────────┘         │                 │
+                             │                 ▼
+                             │        ┌──────────────────┐
+                             └───────►│ FastAPI Backend   │
+                                      │ (runs locally)   │
+                                      └────────┬─────────┘
+                                               │
+                         ┌─────────────────────┼──────────────────┐
+                         ▼                     ▼                  ▼
+                   Extract Product      Analyze Styling     Generate Try-On
+                   (Flash, low)        (Flash, medium)     (Pro Image + Nano)
 ```
 
-### The Pipeline
+The key idea: use the right model for each job. Flash handles text tasks fast and cheap. Pro Image does the heavy lifting for the main try-on where quality matters. Nano-Banana fills in the extra angles without burning through the budget.
 
-**Step 1: Product Extraction** (`gemini-3-flash-preview`, thinking level: `low`)
+The extension itself makes zero AI calls — it captures page content and shows results. All the intelligence runs in the Python backend. The user's Gemini API key is stored locally in the browser and passed per-request to the backend, never sent anywhere else.
 
-When a user triggers the extension on a product page, the extension captures a screenshot and the page HTML. The Flash model parses this into structured product data: name, type, color, style, category, brand, price, material, and description. I use low thinking here because speed matters and the task is straightforward extraction.
+## Challenges
 
-**Step 2: Styling Analysis** (`gemini-3-flash-preview`, thinking level: `medium`)
+- **Speed vs. quality trade-off.** Users want instant results, but good image generation takes time. Splitting work across models with different thinking levels was the solution.
+- **Cross-site compatibility.** Every retail site has different HTML. Instead of parsing specific DOM structures, I rely on screenshots + raw HTML and let Gemini figure it out.
+- **Body representation.** Making try-on images that look realistic across different body types took a lot of prompt iteration.
+- **Wardrobe cataloging.** Getting consistent, structured metadata out of random wardrobe photos (crumpled hoodies, shoes on the floor) required careful prompting.
 
-With the product info in hand, the same Flash model (but with deeper reasoning enabled) analyzes how well the item fits with the user's existing wardrobe. It returns a fit score from 0-100, picks the best matching items from each wardrobe category (tops, bottoms, shoes, accessories), and generates styling tips. Medium thinking gives the model room to reason about color coordination, style coherence, and occasion appropriateness.
+## What I Learned
 
-**Step 3: Image Generation** (`gemini-3-pro-image-preview` + `gemini-2.5-flash-image`)
+- **Thinking levels are a great lever.** Low for extraction, medium for reasoning — same model, very different behavior and cost.
+- **Structured output with Pydantic** eliminates parsing headaches. JSON schema in, clean data out.
+- **Model selection matters more than prompt tuning.** Using Flash for text and Pro for images kept costs down while quality stayed high where it counts.
+- **Multimodal AI is genuinely useful now.** Complex fashion understanding across photos, text, and generated images actually works.
 
-This is where the magic happens. The Pro image model takes the user's photo, the product screenshot, and up to 3 selected wardrobe items, then generates a realistic front-view try-on image. For the additional angles (left, right, back), I use the faster Nano-Banana model (`gemini-2.5-flash-image`) which takes the front image as reference and generates rotated views.
+## What's Next for Spare Room
 
-### Why This Architecture Works
+**Faster generation.** The try-on pipeline currently takes 30-60 seconds. Optimizing image sizes, caching wardrobe embeddings, and parallelizing angle generation can cut this significantly.
 
-The key insight is using the right model for each job. Flash handles the text-heavy reasoning tasks quickly and cheaply. The Pro image model does the heavy lifting for the main visualization where quality matters most. And Nano-Banana fills in the supplementary angles without burning through the budget.
+**Auto-add purchases to wardrobe.** When you buy something online, automatically detect it from order confirmation emails or retailer integrations and add it to your wardrobe — no manual photo uploads needed.
 
-I used Pydantic schemas for structured output, which keeps the responses consistent and easy to parse. The Chrome extension itself makes no AI calls; it just captures page content and displays results. All the intelligence lives in the Python backend.
+**Mix & match mode.** Let users drag and drop high-scoring wardrobe items to build their own outfits, not just see what the AI suggests.
 
-The onboarding web app was built using Google AI Studio for rapid prototyping and seamless Gemini integration.
+**Share outfits.** Send a try-on image to a friend on WhatsApp or iMessage and ask "what do you think?" before buying.
 
-## Challenges I ran into
+**Retail partnerships.** Work with retailers to embed Spare Room directly into their product pages — fewer returns for them, better experience for shoppers.
 
-**Wardrobe Recognition Complexity:** Teaching the AI to accurately categorize and understand diverse wardrobe items, from vintage jackets to athletic wear, required extensive prompt engineering and careful use of Gemini's multimodal capabilities.
-
-**Real-Time Performance:** Users expect instant feedback while browsing. Balancing comprehensive analysis with speed meant strategically using different Gemini models and thinking levels for different tasks. This is why the architecture splits work across three model configurations.
-
-**Body Representation:** Creating respectful, accurate virtual try-on experiences that work across all body types was both a technical and ethical challenge I took seriously.
-
-**Cross-Site Compatibility:** Making the Chrome extension work seamlessly across different e-commerce platforms with varying page structures required robust content detection. The solution was to rely on screenshots plus raw HTML rather than trying to parse specific DOM structures.
-
-## Accomplishments I'm proud of
-
-- Built a fully functional prototype that actually helps people make smarter shopping decisions
-- Got `gemini-3-pro-image-preview` to create realistic outfit visualizations combining user photos with wardrobe and product images
-- Designed a three-model pipeline that balances speed, cost, and quality
-- Developed an intuitive onboarding flow that makes wardrobe digitization painless
-- Created multi-angle try-on views using Nano-Banana for the supplementary rotations
-- Successfully leveraged Gemini 3's thinking levels to control reasoning depth per task
-
-## What I learned
-
-- **Gemini 3's thinking levels** are incredibly useful for balancing cost, speed, and quality. Low thinking for extraction, medium for analysis, and letting the image models handle generation separately.
-- **Multimodal AI** has matured to the point where complex fashion understanding is genuinely possible
-- **Structured output with Pydantic** makes working with LLM responses so much easier. No more parsing headaches.
-- **Model selection matters.** Using Flash for text tasks and Pro-image for generation kept costs reasonable while maintaining quality where it counts.
-- Building for **real-world shopping behavior** requires understanding the entire user journey, not just the transaction moment
-
-## What's next for Spare Room
-
-**Retail Partnerships:** I want to work directly with retailers to integrate Spare Room into their platforms, providing them with reduced return rates and happier customers.
-
-**Social Features:** Allow users to get feedback from friends on potential purchases and share outfit combinations.
-
-**Seasonal Intelligence:** Proactive suggestions when seasons change. "You have 3 items that would work great with a light spring jacket. Here are some options."
-
-**Sustainability Dashboard:** Track how many returns users have avoided and visualize their personal CO2 savings over time.
-
-**Mobile App:** Bring the full Spare Room experience to mobile shopping with AR try-on capabilities.
-
-**Resale Integration:** When users add new items, suggest older pieces they might want to sell or donate, creating a circular fashion ecosystem.
-
-The vision is a future where every clothing purchase is intentional, every item gets worn, and fashion retail contributes to sustainability rather than waste.
+**Sustainability dashboard.** Track how many returns you've avoided and see your CO2 savings over time.

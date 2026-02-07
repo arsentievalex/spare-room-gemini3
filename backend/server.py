@@ -6,47 +6,29 @@ Endpoints:
 - GET /health: Health check endpoint
 """
 
-import os
-import json
 import base64
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 
-from wardrobe import get_user_profile, get_wardrobe, get_user_context
+from wardrobe import fetch_user_info, parse_user_profile, parse_wardrobe_items, get_user_context
 from gemini_client import full_product_analysis
 
 
-def load_image_thumbnail(file_path: str) -> Optional[str]:
-    """Load an image and return as base64 string."""
+async def load_image_thumbnail_from_url(url: str) -> Optional[str]:
+    """Download an image from URL and return as base64 string."""
     try:
-        if not file_path or not os.path.exists(file_path):
+        if not url:
             return None
-        with open(file_path, 'rb') as f:
-            return base64.b64encode(f.read()).decode('utf-8')
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url)
+            if response.status_code == 200:
+                return base64.b64encode(response.content).decode('utf-8')
+        return None
     except Exception:
         return None
-
-# Helper function for debug logging
-def debug_log(location, message, data, hypothesis_id="G"):
-    log_file = '/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log'
-    try:
-        with open(log_file, 'a') as f:
-            import time
-            f.write(json.dumps({
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": hypothesis_id,
-                "location": location,
-                "message": message,
-                "data": data,
-                "timestamp": int(time.time() * 1000)
-            }) + '\n')
-            f.flush()
-            os.fsync(f.fileno())
-    except Exception as e:
-        print(f"Debug log error: {e}")
 
 
 # Initialize FastAPI app
@@ -59,7 +41,7 @@ app = FastAPI(
 # Configure CORS for Chrome extension
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for extension
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -70,7 +52,8 @@ app.add_middleware(
 
 class AnalyzeRequest(BaseModel):
     """Request body for product analysis."""
-    user_id: str
+    username: str
+    gemini_api_key: str
     page_url: str
     page_title: str
     html_content: str
@@ -96,7 +79,8 @@ class WardrobeItemResponse(BaseModel):
     color: str
     color_hex: Optional[str] = None
     match_reason: Optional[str] = None
-    image_base64: Optional[str] = None  # Thumbnail of the actual item
+    image_base64: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class GeneratedImages(BaseModel):
@@ -113,8 +97,8 @@ class AnalyzeResponse(BaseModel):
     fit_score: int
     selected_items: list[WardrobeItemResponse]
     commentary: str
-    generated_image_base64: Optional[str] = None  # Backwards compatibility
-    generated_images: Optional[GeneratedImages] = None  # Multi-angle images
+    generated_image_base64: Optional[str] = None
+    generated_images: Optional[GeneratedImages] = None
 
 
 # ==================== Endpoints ====================
@@ -122,11 +106,7 @@ class AnalyzeResponse(BaseModel):
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    api_key_set = bool(os.environ.get("GEMINI_API_KEY"))
-    return {
-        "status": "healthy",
-        "gemini_api_key_configured": api_key_set
-    }
+    return {"status": "healthy"}
 
 
 @app.post("/analyze-and-style", response_model=AnalyzeResponse)
@@ -135,37 +115,44 @@ async def analyze_and_style(request: AnalyzeRequest):
     Analyze a product page and return styling recommendations.
 
     Flow:
-    1. Extract product info from screenshot + HTML using Gemini
-    2. Match with user's wardrobe items
-    3. Generate styled outfit visualization
-    4. Return fit score, selected items, and commentary
+    1. Fetch user data from GCS
+    2. Extract product info from screenshot + HTML using Gemini
+    3. Match with user's wardrobe items
+    4. Generate styled outfit visualization
+    5. Return fit score, selected items, and commentary
     """
-    # #region agent log
-    debug_log("server.py:88", "analyze_and_style endpoint called", {"user_id": request.user_id})
-    # #endregion
-    # Validate user exists
-    user_profile = get_user_profile(request.user_id)
-    if not user_profile:
-        raise HTTPException(status_code=404, detail=f"User not found: {request.user_id}")
+    # Fetch user info from GCS
+    user_info = await fetch_user_info(request.username)
+    if not user_info:
+        raise HTTPException(status_code=404, detail=f"User not found: {request.username}")
 
-    # Get user's wardrobe
-    wardrobe = get_wardrobe(request.user_id)
+    # Parse user data
+    user_profile = parse_user_profile(user_info)
+    wardrobe = parse_wardrobe_items(user_info)
+
     if not wardrobe:
-        raise HTTPException(status_code=404, detail=f"No wardrobe found for user: {request.user_id}")
+        raise HTTPException(status_code=404, detail=f"No wardrobe items found for user: {request.username}")
 
     # Convert wardrobe items to dicts for the AI
     wardrobe_dicts = [item.model_dump() for item in wardrobe]
 
     # Get user context for AI prompts
-    user_context = get_user_context(request.user_id)
+    user_context = get_user_context(user_profile, wardrobe)
+
+    # Build user profile dict for image generation
+    user_profile_dict = {
+        'username': user_profile.username,
+        'height_cm': user_profile.height_cm,
+        'weight_kg': user_profile.weight_kg,
+        'gender': user_profile.gender,
+        'typical_size_top': (user_profile.usual_sizes or {}).get('tshirts', 'M'),
+        'typical_size_bottom': (user_profile.usual_sizes or {}).get('pants', 'M'),
+        'shoe_size': (user_profile.usual_sizes or {}).get('shoes', ''),
+        'profile_image_url': user_profile.profile_image_url,
+    }
 
     try:
-        # #region agent log
-        import json
-        with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"G","location":"server.py:114","message":"Starting full_product_analysis","data":{"user_id":request.user_id},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
-        # Run full analysis
+        # Run full analysis with user's API key
         result = await full_product_analysis(
             screenshot_base64=request.screenshot_base64,
             html_content=request.html_content,
@@ -173,19 +160,10 @@ async def analyze_and_style(request: AnalyzeRequest):
             page_title=request.page_title,
             user_context=user_context,
             wardrobe_items=wardrobe_dicts,
-            user_profile=user_profile.model_dump()
+            user_profile=user_profile_dict,
+            gemini_api_key=request.gemini_api_key
         )
-        # #region agent log
-        with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"G","location":"server.py:125","message":"full_product_analysis completed","data":{"has_generated_image":bool(result.get("generated_image_base64"))},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
 
-        # Format response
-        # #region agent log
-        import json
-        with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"G","location":"server.py:127","message":"Formatting response","data":{"has_generated_image":bool(result.get("generated_image_base64")),"image_length":len(result.get("generated_image_base64","")) if result.get("generated_image_base64") else 0},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
         # Build generated images response
         gen_images = result.get("generated_images", {})
         generated_images_response = GeneratedImages(
@@ -198,7 +176,8 @@ async def analyze_and_style(request: AnalyzeRequest):
         # Build selected items with image thumbnails
         selected_items_response = []
         for item in result["selected_items"]:
-            image_b64 = load_image_thumbnail(item.get("image_path"))
+            image_url = item.get("image_path")
+            image_b64 = await load_image_thumbnail_from_url(image_url) if image_url else None
             selected_items_response.append(
                 WardrobeItemResponse(
                     id=item["id"],
@@ -207,7 +186,8 @@ async def analyze_and_style(request: AnalyzeRequest):
                     color=item["color"],
                     color_hex=item.get("color_hex"),
                     match_reason=item.get("match_reason"),
-                    image_base64=image_b64
+                    image_base64=image_b64,
+                    image_url=image_url,
                 )
             )
 
@@ -222,12 +202,8 @@ async def analyze_and_style(request: AnalyzeRequest):
 
     except Exception as e:
         print(f"Analysis error: {e}")
-        # #region agent log
-        import json
         import traceback
-        with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"server.py:148","message":"Exception in analyze_and_style","data":{"error_type":type(e).__name__,"error_message":str(e),"traceback":traceback.format_exc()},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 

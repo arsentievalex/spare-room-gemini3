@@ -243,11 +243,15 @@ function showSuccessState(analysis) {
       itemEl.className = 'wardrobe-item';
       const colorHex = item.color_hex || getColorCode(item.color);
 
-      // Use thumbnail image if available, otherwise fall back to color
-      const hasImage = item.image_base64;
-      const imageContent = hasImage
-        ? `<img src="data:image/png;base64,${item.image_base64}" alt="${item.name}" class="item-thumbnail">`
-        : `<div class="item-color" style="background-color: ${colorHex}"></div>`;
+      // Use image URL, base64, or fall back to color swatch
+      let imageContent;
+      if (item.image_url) {
+        imageContent = `<img src="${item.image_url}" alt="${item.name}" class="item-thumbnail">`;
+      } else if (item.image_base64) {
+        imageContent = `<img src="data:image/png;base64,${item.image_base64}" alt="${item.name}" class="item-thumbnail">`;
+      } else {
+        imageContent = `<div class="item-color" style="background-color: ${colorHex}"></div>`;
+      }
 
       itemEl.innerHTML = `
         <div class="item-image-wrapper">

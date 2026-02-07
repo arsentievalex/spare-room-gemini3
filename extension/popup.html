@@ -13,16 +13,41 @@
       <p class="popup-tagline">Personal AI Stylist</p>
     </div>
 
-    <div class="current-page">
-      <p id="page-title" class="page-title">Loading...</p>
+    <!-- Setup Screen -->
+    <div id="setup-screen">
+      <div class="setup-field">
+        <label for="username-input" class="setup-label">Username</label>
+        <input type="text" id="username-input" class="setup-input" placeholder="e.g. bold-mode-zmb12">
+        <p class="setup-hint">Your username was provided in the web app (AI Studio) when setting up your profile.</p>
+      </div>
+
+      <div class="setup-field">
+        <label for="apikey-input" class="setup-label">Gemini API Key</label>
+        <input type="password" id="apikey-input" class="setup-input" placeholder="Enter your Gemini API key">
+        <p class="setup-hint">Your API key is stored locally and never sent anywhere outside of your machine.</p>
+      </div>
+
+      <button id="save-setup-btn" class="style-button">
+        Save & Continue
+      </button>
+      <div id="setup-error" class="status error" style="display:none;"></div>
     </div>
 
-    <button id="style-btn" class="style-button">
-      <span class="button-icon">&#10024;</span>
-      Style this item
-    </button>
+    <!-- Main Screen (hidden until setup complete) -->
+    <div id="main-screen" style="display:none;">
+      <div class="current-page">
+        <p id="page-title" class="page-title">Loading...</p>
+      </div>
 
-    <div id="status" class="status"></div>
+      <button id="style-btn" class="style-button">
+        <span class="button-icon">&#10024;</span>
+        Style this item
+      </button>
+
+      <div id="status" class="status"></div>
+
+      <button id="change-settings-btn" class="settings-link">Change settings</button>
+    </div>
   </div>
   <script src="popup.js"></script>
 </body>

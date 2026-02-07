@@ -1,262 +1,122 @@
 """
-Demo user's wardrobe data for the Styling Assistant POC.
+User wardrobe data fetched from Google Cloud Storage.
 
-This module contains hardcoded wardrobe items and user profile for demonstration.
-In a production system, this would be fetched from a database.
+Each user has a folder at:
+  https://storage.googleapis.com/gemini3-hackathon-demo-wardrobe/{username}/
 
-Images are loaded from the temp_images folder.
+Containing:
+  - user_info.json (profile + wardrobe items)
+  - user_photo.jpg
+  - wardrobe/item_{id}.jpg
 """
 
-import os
+import httpx
 from typing import Optional
 from pydantic import BaseModel
 
-# Base path for images (relative to this file's directory)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TEMP_IMAGES_DIR = os.path.join(os.path.dirname(BASE_DIR), 'temp_images')
+
+GCS_BASE_URL = 'https://storage.googleapis.com/gemini3-hackathon-demo-wardrobe'
 
 
 class WardrobeItem(BaseModel):
     """A single item in the user's wardrobe."""
     id: str
     name: str
-    type: str  # e.g., "pants", "shirt", "shoes", "accessory"
+    type: str
     color: str
-    color_hex: str  # Hex color code for accurate display
-    style: str  # e.g., "casual", "formal", "streetwear"
+    color_hex: str
+    style: str
     description: str
-    image_path: Optional[str] = None  # Local file path for the item image
+    image_path: Optional[str] = None  # URL to the item image on GCS
 
 
 class UserProfile(BaseModel):
     """User profile with body measurements and style preferences."""
-    user_id: str
-    name: str
-    height_cm: int
-    typical_size_top: str
-    typical_size_bottom: str
-    shoe_size: str
-    style_preferences: list[str]
-    photo_path: Optional[str] = None  # Local file path for user reference photo
+    username: str
+    gender: Optional[str] = None
+    height_cm: int = 175
+    weight_kg: Optional[int] = None
+    usual_sizes: Optional[dict] = None
+    style_preferences: Optional[dict] = None
+    profile_image_url: Optional[str] = None
 
 
-# Demo user profile
-DEMO_USER = UserProfile(
-    user_id="demo_user",
-    name="Alex Demo",
-    height_cm=178,
-    typical_size_top="M",
-    typical_size_bottom="32",
-    shoe_size="10 US",
-    style_preferences=["smart casual", "minimalist"],
-    photo_path=os.path.join(TEMP_IMAGES_DIR, "user_photo.jpg")
-)
-
-# Demo wardrobe items
-DEMO_WARDROBE: list[WardrobeItem] = [
-    # Hoodies & Sweaters
-    WardrobeItem(
-        id="top_01",
-        name="White Hoodie",
-        type="hoodie",
-        color="white",
-        color_hex="#F5F5F5",
-        style="casual",
-        description="White oversized hoodie with a logo.",
-        image_path=os.path.join(TEMP_IMAGES_DIR, "hoodie white.png")
-    ),
-    WardrobeItem(
-        id="top_02",
-        name="Green Hoodie",
-        type="hoodie",
-        color="green",
-        color_hex="#2D5A3D",
-        style="casual",
-        description="Forest green hoodie, relaxed fit.",
-        image_path=os.path.join(TEMP_IMAGES_DIR, "hoodie green.png")
-    ),
-    WardrobeItem(
-        id="top_03",
-        name="Red Hoodie",
-        type="hoodie",
-        color="red",
-        color_hex="#B42B2B",
-        style="casual",
-        description="Bold red hoodie, statement piece.",
-        image_path=os.path.join(TEMP_IMAGES_DIR, "hoodie red.png")
-    ),
-    WardrobeItem(
-        id="top_04",
-        name="Stranger Things Hoodie",
-        type="hoodie",
-        color="black",
-        color_hex="#1A1A1A",
-        style="streetwear",
-        description="Black Stranger Things graphic hoodie.",
-        image_path=os.path.join(TEMP_IMAGES_DIR, "hoodie stranger things.png")
-    ),
-    WardrobeItem(
-        id="top_05",
-        name="Black Sweater",
-        type="sweater",
-        color="black",
-        color_hex="#1C1C1C",
-        style="smart casual",
-        description="Classic black knit sweater.",
-        image_path=os.path.join(TEMP_IMAGES_DIR, "sweater black.png")
-    ),
-
-    # Pants & Jeans
-    WardrobeItem(
-        id="bottom_01",
-        name="Blue Jeans",
-        type="jeans",
-        color="blue",
-        color_hex="#4A6FA5",
-        style="casual",
-        description="Classic blue jeans with a straight leg.",
-        image_path=os.path.join(TEMP_IMAGES_DIR, "jeans blue.png")
-    ),
-    WardrobeItem(
-        id="bottom_02",
-        name="Gray Jeans",
-        type="jeans",
-        color="gray",
-        color_hex="#6B6B6B",
-        style="casual",
-        description="Gray denim jeans, versatile neutral.",
-        image_path=os.path.join(TEMP_IMAGES_DIR, "jeans gray.png")
-    ),
-    # WardrobeItem(
-    #     id="bottom_03",
-    #     name="Beige Chinos",
-    #     type="chinos",
-    #     color="beige",
-    #     color_hex="#C9B896",
-    #     style="smart casual",
-    #     description="Versatile beige chino pants.",
-    #     image_path=os.path.join(TEMP_IMAGES_DIR, "pants biege.png")
-    # ),
-    # WardrobeItem(
-    #     id="bottom_04",
-    #     name="Light Pants",
-    #     type="trousers",
-    #     color="cream",
-    #     color_hex="#E8E4D9",
-    #     style="smart casual",
-    #     description="Light cream trousers, clean and minimal.",
-    #     image_path=os.path.join(TEMP_IMAGES_DIR, "light pants.png")
-    # ),
-    WardrobeItem(
-        id="bottom_05",
-        name="Sport Pants",
-        type="joggers",
-        color="gray",
-        color_hex="#4A4A4A",
-        style="athleisure",
-        description="Gray athletic jogger pants.",
-        image_path=os.path.join(TEMP_IMAGES_DIR, "pants sport.png")
-    ),
-
-    # Shoes
-    WardrobeItem(
-        id="shoes_01",
-        name="Black Sneakers",
-        type="sneakers",
-        color="black",
-        color_hex="#1A1A1A",
-        style="casual",
-        description="Classic black sneakers.",
-        image_path=os.path.join(TEMP_IMAGES_DIR, "black sneakers.png")
-    ),
-    WardrobeItem(
-        id="shoes_02",
-        name="White Sneakers",
-        type="sneakers",
-        color="white",
-        color_hex="#FFFFFF",
-        style="casual",
-        description="Clean white sneakers.",
-        image_path=os.path.join(TEMP_IMAGES_DIR, "white sneakers.png")
-    ),
-    # WardrobeItem(
-    #     id="shoes_03",
-    #     name="Gray & White Sneakers",
-    #     type="sneakers",
-    #     color="gray",
-    #     color_hex="#9E9E9E",
-    #     style="casual",
-    #     description="Two-tone gray and white sneakers.",
-    #     image_path=os.path.join(TEMP_IMAGES_DIR, "gray white sneakers.png")
-    # ),
-
-    # Accessories
-    # WardrobeItem(
-    #     id="acc_01",
-    #     name="Dark Cap",
-    #     type="cap",
-    #     color="navy",
-    #     color_hex="#1E2A3A",
-    #     style="casual",
-    #     description="Dark navy baseball cap.",
-    #     image_path=os.path.join(TEMP_IMAGES_DIR, "dark cap.png")
-    # ),
-    # WardrobeItem(
-    #     id="acc_02",
-    #     name="Light Cap",
-    #     type="cap",
-    #     color="beige",
-    #     color_hex="#D4C4A8",
-    #     style="casual",
-    #     description="Light beige baseball cap.",
-    #     image_path=os.path.join(TEMP_IMAGES_DIR, "light cap.png")
-    # ),
-]
+async def fetch_user_info(username: str) -> Optional[dict]:
+    """Fetch user_info.json from GCS for the given username."""
+    url = f"{GCS_BASE_URL}/{username}/user_info.json"
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            response = await client.get(url)
+            if response.status_code == 200:
+                return response.json()
+            print(f"Failed to fetch user info: {response.status_code}")
+            return None
+        except Exception as e:
+            print(f"Error fetching user info: {e}")
+            return None
 
 
-def get_user_profile(user_id: str) -> Optional[UserProfile]:
-    """Get user profile by ID."""
-    if user_id == "demo_user":
-        return DEMO_USER
-    return None
+def parse_user_profile(user_info: dict) -> UserProfile:
+    """Parse user_info.json into a UserProfile."""
+    measurements = user_info.get('measurements', {})
+    return UserProfile(
+        username=user_info['username'],
+        gender=user_info.get('gender', ''),
+        height_cm=measurements.get('height_cm', 175),
+        weight_kg=measurements.get('weight_kg'),
+        usual_sizes=user_info.get('usual_sizes'),
+        style_preferences=user_info.get('style_preferences'),
+        profile_image_url=user_info.get('profile_image_url'),
+    )
 
 
-def get_wardrobe(user_id: str) -> list[WardrobeItem]:
-    """Get wardrobe items for a user."""
-    if user_id == "demo_user":
-        return DEMO_WARDROBE
-    return []
+def parse_wardrobe_items(user_info: dict) -> list[WardrobeItem]:
+    """Parse wardrobe_items from user_info.json into WardrobeItem list."""
+    items = []
+    for item_data in user_info.get('wardrobe_items', []):
+        items.append(WardrobeItem(
+            id=item_data['id'],
+            name=item_data['name'],
+            type=item_data['type'],
+            color=item_data['color'],
+            color_hex=item_data.get('color_hex', '#9ca3af'),
+            style=item_data.get('style', 'casual'),
+            description=item_data.get('description', ''),
+            image_path=item_data.get('image_path'),
+        ))
+    return items
 
 
-def get_wardrobe_summary(user_id: str) -> str:
-    """Get a text summary of the user's wardrobe for AI prompts."""
-    wardrobe = get_wardrobe(user_id)
-    if not wardrobe:
-        return "No wardrobe items found."
-
-    summary_lines = ["User's current wardrobe:"]
-    for item in wardrobe:
-        summary_lines.append(
-            f"- {item.name} ({item.type}): {item.color}, {item.style} style. {item.description}"
-        )
-
-    return "\n".join(summary_lines)
-
-
-def get_user_context(user_id: str) -> str:
-    """Get full user context including profile and wardrobe for AI prompts."""
-    profile = get_user_profile(user_id)
-    if not profile:
-        return "Unknown user."
+def get_user_context(profile: UserProfile, wardrobe: list[WardrobeItem]) -> str:
+    """Build user context string for AI prompts."""
+    sizes = profile.usual_sizes or {}
+    style_prefs = profile.style_preferences or {}
+    raw_style = style_prefs.get('raw_text', '')
+    constraints = style_prefs.get('parsed_constraints', [])
 
     context = f"""User Profile:
-- Name: {profile.name}
-- Height: {profile.height_cm}cm
-- Typical top size: {profile.typical_size_top}
-- Typical bottom size: {profile.typical_size_bottom}
-- Shoe size: {profile.shoe_size}
-- Style preferences: {', '.join(profile.style_preferences)}
+- Username: {profile.username}
+- Gender: {profile.gender or 'Not specified'}
+- Height: {profile.height_cm}cm"""
 
-{get_wardrobe_summary(user_id)}"""
+    if profile.weight_kg:
+        context += f"\n- Weight: {profile.weight_kg}kg"
+
+    if sizes:
+        size_parts = []
+        for key, val in sizes.items():
+            size_parts.append(f"{key}: {val}")
+        context += f"\n- Usual sizes: {', '.join(size_parts)}"
+
+    if raw_style:
+        context += f"\n- Style preferences: {raw_style}"
+
+    if constraints:
+        context += f"\n- Style constraints: {', '.join(constraints)}"
+
+    # Wardrobe summary
+    context += "\n\nUser's current wardrobe:"
+    for item in wardrobe:
+        context += f"\n- {item.name} ({item.type}): {item.color}, {item.style} style. {item.description}"
 
     return context

@@ -7,7 +7,6 @@ Provides wrapper functions for:
 3. Image generation for outfit visualization (virtual try-on)
 """
 
-import os
 import base64
 import json
 import httpx
@@ -15,22 +14,8 @@ from typing import Optional
 from pydantic import BaseModel
 from google import genai
 from google.genai import types
-from dotenv import load_dotenv
 import PIL.Image
 from io import BytesIO
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Get API key from environment
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    print("WARNING: GEMINI_API_KEY not set. Set it before making API calls.")
-
-# Initialize client (will be None if no API key)
-client = None
-if GEMINI_API_KEY:
-    client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 # ==================== Data Models ====================
@@ -64,6 +49,11 @@ class StylingResult(BaseModel):
 
 # ==================== Helper Functions ====================
 
+def _get_client(gemini_api_key: str) -> genai.Client:
+    """Create a Gemini client with the given API key."""
+    return genai.Client(api_key=gemini_api_key)
+
+
 def get_product_category(product_type: str) -> str:
     """Map product type to category for filtering."""
     type_lower = product_type.lower()
@@ -96,59 +86,47 @@ def get_product_category(product_type: str) -> str:
 def get_visible_categories(product_category: str) -> list[str]:
     """
     Determine which wardrobe categories would be visible when wearing a product.
-    E.g., if wearing a winter jacket, a t-shirt underneath won't be visible.
     """
     if product_category == "outerwear":
-        # Jacket/coat: show pants, shoes, accessories (not shirts underneath)
         return ["bottom", "shoes", "accessory"]
     elif product_category == "top":
-        # Shirt/top: show pants, shoes, maybe outerwear
         return ["bottom", "shoes", "outerwear", "accessory"]
     elif product_category == "bottom":
-        # Pants/skirt: show tops, shoes, outerwear
         return ["top", "shoes", "outerwear", "accessory"]
     elif product_category == "shoes":
-        # Shoes: show pants, tops, outerwear
         return ["bottom", "top", "outerwear", "accessory"]
     else:
-        # Default: show everything
         return ["top", "bottom", "outerwear", "shoes", "accessory"]
 
 
-def load_image_as_base64(file_path: str) -> Optional[str]:
-    """Load an image from local file path and return as base64."""
+async def _load_pil_image_from_url(url: str) -> Optional[PIL.Image.Image]:
+    """Download an image from a URL and return as PIL Image."""
     try:
-        import os
-        # #region agent log
-        import json
-        with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"gemini_client.py:113","message":"load_image_as_base64 entry","data":{"file_path":file_path,"file_exists":os.path.exists(file_path) if file_path else False},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
-        
-        if not file_path or not os.path.exists(file_path):
-            print(f"Image file not found: {file_path}")
-            # #region agent log
-            with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"gemini_client.py:120","message":"Image file not found","data":{"file_path":file_path},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            # #endregion
+        if not url:
             return None
-        
-        with open(file_path, 'rb') as f:
-            image_data = f.read()
-            print(f"Loaded image from {file_path}: {len(image_data)} bytes")
-            # #region agent log
-            with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"gemini_client.py:127","message":"Image loaded successfully","data":{"file_path":file_path,"content_length":len(image_data)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            # #endregion
-            return base64.b64encode(image_data).decode('utf-8')
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(url)
+            if response.status_code == 200:
+                img = PIL.Image.open(BytesIO(response.content))
+                print(f"Loaded PIL image from URL {url}: {img.size}")
+                return img
+            print(f"Failed to download image from {url}: {response.status_code}")
+            return None
     except Exception as e:
-        print(f"Failed to load image from {file_path}: {e}")
-        # #region agent log
-        import json
-        with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"gemini_client.py:133","message":"Exception in load_image_as_base64","data":{"error_type":type(e).__name__,"error_message":str(e)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
-    return None
+        print(f"Failed to load image from URL {url}: {e}")
+        return None
+
+
+def _base64_to_pil_image(base64_str: str) -> Optional[PIL.Image.Image]:
+    """Convert a base64 string to a PIL Image object."""
+    try:
+        image_data = base64.b64decode(base64_str)
+        img = PIL.Image.open(BytesIO(image_data))
+        print(f"Converted base64 to PIL image: {img.size}")
+        return img
+    except Exception as e:
+        print(f"Failed to convert base64 to PIL image: {e}")
+        return None
 
 
 # ==================== Product Extraction ====================
@@ -157,13 +135,13 @@ async def extract_product_info(
     screenshot_base64: str,
     html_content: str,
     page_url: str,
-    page_title: str
+    page_title: str,
+    gemini_api_key: str
 ) -> ProductInfo:
     """
     Extract product information from a page screenshot and HTML.
     """
-    if not client:
-        raise RuntimeError("GEMINI_API_KEY not configured")
+    client = _get_client(gemini_api_key)
 
     # Prepare the image
     image_data = base64.b64decode(screenshot_base64)
@@ -244,7 +222,6 @@ Return valid JSON matching the schema exactly. Ensure all string values are prop
         result_text = response.text
         result_dict = json.loads(result_text)
         product = ProductInfo(**result_dict)
-        # Ensure category is set correctly
         if not product.category or product.category == "other":
             product.category = get_product_category(product.type)
         return product
@@ -264,14 +241,14 @@ Return valid JSON matching the schema exactly. Ensure all string values are prop
 async def analyze_styling(
     product: ProductInfo,
     user_context: str,
-    wardrobe_items: list[dict]
+    wardrobe_items: list[dict],
+    gemini_api_key: str
 ) -> StylingResult:
     """
     Analyze how well a product fits with the user's wardrobe.
     Returns ONE best match per visible category.
     """
-    if not client:
-        raise RuntimeError("GEMINI_API_KEY not configured")
+    client = _get_client(gemini_api_key)
 
     # Get categories that would be visible with this product
     visible_categories = get_visible_categories(product.category)
@@ -296,7 +273,6 @@ async def analyze_styling(
         for item in filtered_items
     ])
 
-    # Build valid IDs list for the prompt
     valid_ids = [item['id'] for item in filtered_items]
 
     prompt = f"""You are a world-renowned personal stylist who has dressed celebrities, styled editorial shoots for Vogue, and served as creative director at luxury fashion houses. You possess encyclopedic knowledge of fashion theory, color science, and the subtle art of creating outfits that make people feel confident and look exceptional.
@@ -488,18 +464,16 @@ Return valid JSON only."""
         result_dict = json.loads(result_text)
         result = StylingResult(**result_dict)
 
-        # CRITICAL: Filter out any hallucinated items that aren't in the wardrobe
+        # Filter out any hallucinated items
         valid_id_set = set(valid_ids)
         validated_matches = []
         seen_categories = set()
 
         for match in result.best_matches:
             if match.item_id in valid_id_set:
-                # Find the item to get its category
                 item = next((i for i in filtered_items if i['id'] == match.item_id), None)
                 if item:
                     category = item['category']
-                    # Only keep ONE item per category
                     if category not in seen_categories:
                         seen_categories.add(category)
                         validated_matches.append(match)
@@ -518,75 +492,29 @@ Return valid JSON only."""
 
 # ==================== Image Generation (Virtual Try-On) ====================
 
-def _load_pil_image(file_path: str) -> Optional[PIL.Image.Image]:
-    """Load an image file as a PIL Image object."""
-    try:
-        if not file_path or not os.path.exists(file_path):
-            print(f"Image file not found: {file_path}")
-            return None
-        img = PIL.Image.open(file_path)
-        print(f"Loaded PIL image from {file_path}: {img.size}")
-        return img
-    except Exception as e:
-        print(f"Failed to load PIL image from {file_path}: {e}")
-        return None
-
-
-def _base64_to_pil_image(base64_str: str) -> Optional[PIL.Image.Image]:
-    """Convert a base64 string to a PIL Image object."""
-    try:
-        image_data = base64.b64decode(base64_str)
-        img = PIL.Image.open(BytesIO(image_data))
-        print(f"Converted base64 to PIL image: {img.size}")
-        return img
-    except Exception as e:
-        print(f"Failed to convert base64 to PIL image: {e}")
-        return None
-
-
 async def generate_tryon_image(
     product: ProductInfo,
     product_screenshot_base64: str,
     selected_items: list[dict],
-    user_profile: dict
+    user_profile: dict,
+    gemini_api_key: str
 ) -> Optional[str]:
     """
     Generate a virtual try-on image showing the user wearing the outfit.
-
-    Uses gemini-3-pro-image-preview which accepts up to 6 images.
-    We pass: 1) user reference photo, 2) product image, 3-5) up to 3 wardrobe items.
+    Loads user photo and wardrobe item images from URLs.
     """
-    # #region agent log
-    import json
-    with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"gemini_client.py:342","message":"generate_tryon_image entry","data":{"has_client":bool(client),"product_name":product.name,"selected_items_count":len(selected_items)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-    # #endregion
-    if not client:
-        # #region agent log
-        with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"gemini_client.py:343","message":"Client not initialized","data":{"error":"GEMINI_API_KEY not configured"},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
-        raise RuntimeError("GEMINI_API_KEY not configured")
+    client = _get_client(gemini_api_key)
 
     # User body info
     height = user_profile.get('height_cm', 175)
     size_top = user_profile.get('typical_size_top', 'M')
     size_bottom = user_profile.get('typical_size_bottom', '32')
 
-    # Load user photo as PIL Image (IMAGE 1)
-    user_photo_path = user_profile.get('photo_path')
-    # #region agent log
-    with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"gemini_client.py:388","message":"Checking user photo path","data":{"user_photo_path":user_photo_path},"timestamp":int(__import__('time').time()*1000)})+'\n')
-    # #endregion
-
-    user_photo_pil = _load_pil_image(user_photo_path) if user_photo_path else None
+    # Load user photo from URL (IMAGE 1)
+    user_photo_url = user_profile.get('profile_image_url')
+    user_photo_pil = await _load_pil_image_from_url(user_photo_url) if user_photo_url else None
     if not user_photo_pil:
         print("ERROR: Cannot generate try-on without user photo")
-        # #region agent log
-        with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"gemini_client.py:406","message":"Returning None - no user photo","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
         return None
 
     # Load product screenshot as PIL Image (IMAGE 2)
@@ -595,20 +523,19 @@ async def generate_tryon_image(
         print("ERROR: Cannot generate try-on without product image")
         return None
 
-    # Load up to 3 wardrobe items as PIL Images (IMAGES 3-5)
-    wardrobe_images = []  # List of (pil_image, item_dict) tuples
-    for item in selected_items[:3]:  # Max 3 wardrobe items
-        if item.get('image_path'):
-            item_pil = _load_pil_image(item['image_path'])
+    # Load up to 3 wardrobe items from URLs (IMAGES 3-5)
+    wardrobe_images = []
+    for item in selected_items[:3]:
+        image_url = item.get('image_path')
+        if image_url:
+            item_pil = await _load_pil_image_from_url(image_url)
             if item_pil:
                 wardrobe_images.append((item_pil, item))
                 print(f"Loaded wardrobe item for image: {item['name']}")
 
-    # Get additional user measurements if available
+    # Get additional user info
     weight = user_profile.get('weight_kg', '')
     body_type = user_profile.get('body_type', 'average')
-    skin_tone = user_profile.get('skin_tone', '')
-    hair_color = user_profile.get('hair_color', '')
 
     # Build wardrobe items description for the prompt
     wardrobe_descriptions = []
@@ -618,7 +545,6 @@ async def generate_tryon_image(
 
     wardrobe_section = "\n".join(wardrobe_descriptions) if wardrobe_descriptions else "No additional wardrobe items provided."
 
-    # Build the prompt text
     prompt_text = f"""You are a world-class fashion photographer and virtual try-on specialist. Create a photorealistic virtual try-on image for a high-end retail e-commerce store (Zara, COS, H&M premium style).
 
 ## CRITICAL: USE THE PERSON FROM IMAGE 1
@@ -679,7 +605,6 @@ These items have been specifically selected by our styling AI as the best matche
 Generate the image now."""
 
     # Build contents list: prompt + user photo + product + up to 3 wardrobe items
-    # Total max: 5 images (1 user + 1 product + 3 wardrobe)
     contents = [prompt_text, user_photo_pil, product_pil]
     for wardrobe_pil, _ in wardrobe_images:
         contents.append(wardrobe_pil)
@@ -687,16 +612,7 @@ Generate the image now."""
     images_count = 2 + len(wardrobe_images)
     print(f"Sending {images_count} images to Gemini Pro Image (max 5)")
 
-    # #region agent log
-    with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"gemini_client.py:437","message":"Before API call","data":{"images_count":images_count,"wardrobe_items_count":len(wardrobe_images)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-    # #endregion
-
     try:
-        # #region agent log
-        with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"gemini_client.py:439","message":"Calling Gemini API","data":{"model":"gemini-3-pro-image-preview"},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
         response = client.models.generate_content(
             model="gemini-3-pro-image-preview",
             contents=contents,
@@ -704,92 +620,32 @@ Generate the image now."""
                 response_modalities=['Text', 'Image']
             )
         )
-        # #region agent log
-        with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-            candidate = response.candidates[0] if response.candidates else None
-            has_content = bool(candidate and candidate.content)
-            parts_count = len(candidate.content.parts) if (candidate and candidate.content and hasattr(candidate.content, 'parts')) else 0
-            finish_reason = getattr(candidate, 'finish_reason', None) if candidate else None
-            # Log prompt_feedback if available
-            prompt_feedback = getattr(response, 'prompt_feedback', None)
-            prompt_feedback_data = None
-            if prompt_feedback:
-                prompt_feedback_data = {
-                    "block_reason": str(getattr(prompt_feedback, 'block_reason', None)) if hasattr(prompt_feedback, 'block_reason') else None,
-                    "safety_ratings": [{"category": str(r.category) if hasattr(r, 'category') else None, "probability": str(r.probability) if hasattr(r, 'probability') else None} for r in (getattr(prompt_feedback, 'safety_ratings', []) or [])] if hasattr(prompt_feedback, 'safety_ratings') else []
-                }
-            # Log response structure details
-            response_structure = {
-                "has_candidates": bool(response.candidates),
-                "candidates_count": len(response.candidates) if response.candidates else 0,
-                "has_content": has_content,
-                "parts_count": parts_count,
-                "candidate_type": type(candidate).__name__ if candidate else None,
-                "content_type": type(candidate.content).__name__ if (candidate and candidate.content) else None,
-                "finish_reason": str(finish_reason) if finish_reason else None,
-                "prompt_feedback": prompt_feedback_data
-            }
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"gemini_client.py:447","message":"API call succeeded","data":response_structure,"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
 
         # Extract image from response
         if not response.candidates or len(response.candidates) == 0:
             print("No candidates in response")
-            # #region agent log
-            with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"gemini_client.py:540","message":"No candidates in response","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            # #endregion
             return None
 
         candidate = response.candidates[0]
-        # #region agent log
-        with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-            finish_reason = getattr(candidate, 'finish_reason', None) if candidate else None
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"gemini_client.py:548","message":"Checking candidate","data":{"has_candidate":bool(candidate),"has_content":bool(candidate.content if candidate else None),"finish_reason":str(finish_reason) if finish_reason else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
 
         if not candidate or not candidate.content:
             print(f"Candidate has no content (finish_reason: {getattr(candidate, 'finish_reason', 'unknown') if candidate else 'no candidate'})")
-            # #region agent log
-            with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"gemini_client.py:555","message":"Candidate has no content","data":{"has_candidate":bool(candidate),"has_content":bool(candidate.content if candidate else None),"finish_reason":str(getattr(candidate, 'finish_reason', None)) if candidate else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            # #endregion
             return None
 
         if not hasattr(candidate.content, 'parts') or not candidate.content.parts:
             print("Content has no parts")
-            # #region agent log
-            with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"gemini_client.py:543","message":"Content has no parts","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            # #endregion
             return None
 
         for part in candidate.content.parts:
-            # #region agent log
-            with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"gemini_client.py:451","message":"Checking response part","data":{"has_inline_data":hasattr(part,'inline_data'),"inline_data_exists":bool(hasattr(part,'inline_data') and part.inline_data)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            # #endregion
             if hasattr(part, 'inline_data') and part.inline_data:
                 print(f"Generated try-on image: {len(part.inline_data.data)} bytes")
-                # #region agent log
-                with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"gemini_client.py:454","message":"Image found in response","data":{"image_size_bytes":len(part.inline_data.data)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                # #endregion
                 return base64.b64encode(part.inline_data.data).decode('utf-8')
 
         print("No image in response")
-        # #region agent log
-        with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"gemini_client.py:460","message":"No image in response","data":{"parts_count":len(response.candidates[0].content.parts) if response.candidates else 0},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
         return None
 
     except Exception as e:
         print(f"Image generation error: {e}")
-        # #region agent log
-        with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"gemini_client.py:465","message":"Exception during image generation","data":{"error_type":type(e).__name__,"error_message":str(e)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
         return None
 
 
@@ -797,24 +653,15 @@ async def generate_angle_image(
     main_image_base64: str,
     angle: str,
     product_name: str,
+    gemini_api_key: str,
     max_retries: int = 2
 ) -> Optional[str]:
     """
     Generate the same outfit image from a different angle.
-
-    Args:
-        main_image_base64: The main front-view image
-        angle: One of "left", "right", "back"
-        product_name: Name of the product for context
-        max_retries: Number of retry attempts if generation fails
-
-    Returns:
-        Base64 encoded image from the requested angle
     """
     import asyncio
 
-    if not client:
-        return None
+    client = _get_client(gemini_api_key)
 
     # Convert main image to PIL
     main_image_pil = _base64_to_pil_image(main_image_base64)
@@ -858,9 +705,8 @@ Generate the {angle} view image now."""
 
     for attempt in range(max_retries + 1):
         try:
-            # Add small delay between retries to avoid rate limiting
             if attempt > 0:
-                delay = 2 * attempt  # 2s, 4s delays
+                delay = 2 * attempt
                 print(f"Retry {attempt} for {angle} angle after {delay}s delay...")
                 await asyncio.sleep(delay)
 
@@ -872,11 +718,9 @@ Generate the {angle} view image now."""
                 )
             )
 
-            # Extract image from response
             if response.candidates and len(response.candidates) > 0:
                 candidate = response.candidates[0]
 
-                # Check for finish reason issues
                 finish_reason = getattr(candidate, 'finish_reason', None)
                 if finish_reason and 'SAFETY' in str(finish_reason):
                     print(f"Safety filter triggered for {angle} angle, retrying...")
@@ -903,13 +747,11 @@ async def generate_all_tryon_images(
     product: ProductInfo,
     product_screenshot_base64: str,
     selected_items: list[dict],
-    user_profile: dict
+    user_profile: dict,
+    gemini_api_key: str
 ) -> dict:
     """
     Generate main try-on image and additional angle views.
-
-    Returns:
-        Dict with keys: front, left, right, back (base64 images)
     """
     import asyncio
 
@@ -926,7 +768,8 @@ async def generate_all_tryon_images(
         product=product,
         product_screenshot_base64=product_screenshot_base64,
         selected_items=selected_items,
-        user_profile=user_profile
+        user_profile=user_profile,
+        gemini_api_key=gemini_api_key
     )
 
     if not main_image:
@@ -936,11 +779,10 @@ async def generate_all_tryon_images(
     result["front"] = main_image
     print("Main front image generated successfully")
 
-    # Step 2: Generate angle views with Flash model (sequentially with delays)
+    # Step 2: Generate angle views with Flash model
     angles = ["left", "right", "back"]
 
     for i, angle in enumerate(angles):
-        # Add delay between requests to avoid rate limiting
         if i > 0:
             print(f"Waiting 1s before next angle to avoid rate limiting...")
             await asyncio.sleep(1)
@@ -949,7 +791,8 @@ async def generate_all_tryon_images(
         angle_image = await generate_angle_image(
             main_image_base64=main_image,
             angle=angle,
-            product_name=product.name
+            product_name=product.name,
+            gemini_api_key=gemini_api_key
         )
         if angle_image:
             result[angle] = angle_image
@@ -969,7 +812,8 @@ async def full_product_analysis(
     page_title: str,
     user_context: str,
     wardrobe_items: list[dict],
-    user_profile: dict
+    user_profile: dict,
+    gemini_api_key: str
 ) -> dict:
     """
     Perform full product analysis pipeline:
@@ -977,59 +821,51 @@ async def full_product_analysis(
     2. Analyze styling fit with wardrobe (one item per category)
     3. Generate virtual try-on image
     """
-    # #region agent log
-    import json
-    with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"G","location":"gemini_client.py:471","message":"full_product_analysis entry","data":{"wardrobe_items_count":len(wardrobe_items)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-    # #endregion
     # Step 1: Extract product info
     product = await extract_product_info(
         screenshot_base64=screenshot_base64,
         html_content=html_content,
         page_url=page_url,
-        page_title=page_title
+        page_title=page_title,
+        gemini_api_key=gemini_api_key
     )
 
     # Step 2: Analyze styling
     styling = await analyze_styling(
         product=product,
         user_context=user_context,
-        wardrobe_items=wardrobe_items
+        wardrobe_items=wardrobe_items,
+        gemini_api_key=gemini_api_key
     )
 
-    # Get selected wardrobe items (only validated ones from best_matches)
+    # Get selected wardrobe items
     selected_item_ids = [match.item_id for match in styling.best_matches]
     selected_items = [
         item for item in wardrobe_items
         if item['id'] in selected_item_ids
     ]
 
-    # Add fit scores to selected items for display
+    # Add fit scores to selected items
     for item in selected_items:
         match = next((m for m in styling.best_matches if m.item_id == item['id']), None)
         if match:
             item['fit_score'] = match.fit_score
             item['match_reason'] = match.reason
 
-    # Step 3: Generate virtual try-on images (front + angles)
+    # Step 3: Generate virtual try-on images
     generated_images = await generate_all_tryon_images(
         product=product,
         product_screenshot_base64=screenshot_base64,
         selected_items=selected_items,
-        user_profile=user_profile
+        user_profile=user_profile,
+        gemini_api_key=gemini_api_key
     )
-    # #region agent log
-    import json
-    with open('/Users/olek.arsentiev/Documents/gemini3_hack/.cursor/debug.log', 'a') as f:
-        angles_generated = [k for k, v in generated_images.items() if v]
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"G","location":"gemini_client.py:513","message":"full_product_analysis returning result","data":{"angles_generated":angles_generated,"count":len(angles_generated)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-    # #endregion
 
     return {
         "product": product.model_dump(),
         "fit_score": styling.overall_fit_score,
         "selected_items": selected_items,
         "commentary": styling.styling_tip,
-        "generated_image_base64": generated_images.get("front"),  # Keep for backwards compatibility
-        "generated_images": generated_images  # New: all angles
+        "generated_image_base64": generated_images.get("front"),
+        "generated_images": generated_images
     }
