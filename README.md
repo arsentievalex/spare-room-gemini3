@@ -47,7 +47,7 @@ Web App (AI Studio)                    Chrome Extension
 
 ### 1. Profile Setup (Web App)
 
-1. Open the [Spare Room web app](https://ai.studio/apps/drive/1GwKJawRP47872cGIrVNk6aSj8A5ElyZs)
+1. Open the [Spare Room web app](https://ai.studio/apps/drive/1GwKJawRP47872cGIrVNk6aSj8A5ElyZs?fullscreenApplet=true)
 2. Upload your photo, measurements, style preferences, and wardrobe item photos
 3. Note your unique username — you'll need it for the extension
 
